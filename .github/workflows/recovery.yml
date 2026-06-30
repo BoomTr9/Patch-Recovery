@@ -42,7 +42,7 @@ jobs:
 
       - name: Download latest avbtool
         run: |
-          wget -O avbtool https://raw.githubusercontent.com/LineageOS/android_external_avb/refs/heads/lineage-22.1/avbtool
+          wget -O avbtool https://raw.githubusercontent.com/LineageOS/android_external_avb/refs/heads/lineage-23.2/avbtool.py
           chmod +x avbtool
 
       - name: Download recovery
