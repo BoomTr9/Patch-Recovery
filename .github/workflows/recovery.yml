@@ -4,49 +4,97 @@ on:
   workflow_dispatch:
     inputs:
       RECOVERY_URL:
-        description: 'RECOVERY URL'
+        description: 'Recovery image URL (.img or .img.lz4)'
         required: true
-        default: 'https://files.catbox.moe/(RECOMMENDED)'
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Check Out
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Prepare the environment
-      run: |
-        sudo apt install git wget lz4 tar openssl python3 -y
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            wget \
+            git \
+            lz4 \
+            tar \
+            openssl \
+            python3 \
+            file
 
-    - name: Fetch image from URL
-      run: |
-        ls
-        pwd
-        wget ${{ github.event.inputs.RECOVERY_URL }} -O recovery.img
+      - name: Download latest MagiskBoot
+        run: |
+          wget -O magiskboot https://github.com/topjohnwu/Magisk/releases/latest/download/magiskboot
+          chmod +x magiskboot
 
-    - name: Patch Process-1
-      run: |
-        chmod a+x script1.sh
-        chmod a+x magiskboot
-        ./script1.sh recovery.img || true
+      - name: Download latest avbtool
+        run: |
+          wget -O avbtool https://raw.githubusercontent.com/LineageOS/android_external_avb/refs/heads/lineage-22.1/avbtool
+          chmod +x avbtool
 
-    - name: Patch Process-2
-      run: |
-        chmod a+x script2.sh
-        ./script2.sh || true
-        python3 avbtool extract_public_key --key phh.pem --output phh.pub.bin
-        python3 avbtool add_hash_footer --partition_name recovery --partition_size $(wc -c recovery.img |cut -f 1 -d ' ') --image recovery-patched.img --key phh.pem --algorithm SHA256_RSA4096
-        mkdir output && cd output
-        mv ../r-patched.img recovery.img
-        tar cvf fastbootd-recovery.tar recovery.img
-        md5sum -t fastbootd-recovery.tar >> fastbootd-recovery.tar
-        mv fastbootd-recovery.tar fastbootd-recovery.tar.md5
+      - name: Download recovery
+        run: |
+          wget "${{ github.event.inputs.RECOVERY_URL }}" -O recovery.img
 
-    - name: Upload to Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: output/*.md5
-        name: Patched-Recovery
-        tag_name: ${{ github.run_id }}
+      - name: Patch Process 1
+        run: |
+          chmod +x script1.sh
+          ./script1.sh recovery.img
+
+      - name: Patch Process 2
+        run: |
+          chmod +x script2.sh
+          ./script2.sh
+
+      - name: Debug
+        run: |
+          echo "========== FILES =========="
+          ls -lah
+          find . -name "*.img"
+
+      - name: Sign image
+        run: |
+          python3 avbtool extract_public_key \
+            --key phh.pem \
+            --output phh.pub.bin
+
+          SIZE=$(stat -c%s r-patched.img)
+
+          python3 avbtool add_hash_footer \
+            --partition_name recovery \
+            --partition_size ${SIZE} \
+            --image r-patched.img \
+            --key phh.pem \
+            --algorithm SHA256_RSA4096
+
+      - name: Create Odin package
+        run: |
+          mkdir output
+
+          mv r-patched.img output/recovery.img
+
+          cd output
+
+          tar --format=ustar -cf recovery.tar recovery.img
+
+          md5sum -t recovery.tar >> recovery.tar
+
+          mv recovery.tar recovery.tar.md5
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Patched-Recovery
+          path: output/*
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.run_id }}
+          name: Patched-Recovery
+          files: output/*
