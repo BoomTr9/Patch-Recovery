@@ -99,10 +99,3 @@ jobs:
         with:
           name: Patched-Recovery
           path: output/*
-
-      - name: Upload Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.run_id }}
-          name: Patched-Recovery
-          files: output/*
